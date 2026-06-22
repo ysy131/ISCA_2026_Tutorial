@@ -1,0 +1,1570 @@
+module Top (
+`ifndef CUSTOM_XCZU47DR
+    output [0:0] LED0,
+    output [0:0] LED1,
+    output [1:0] clk104_clk_spi_mux_sel_tri_o,
+
+    output [0:0] trigger_out_sma,
+    output [0:0] trigger_out_loop,
+`endif
+    input  [0:0] trigger_in,
+
+    // HMC7044 clock chip control (SPI interface)
+    output RESET_H7044_H_0,
+    output H7044_SYNC_0,
+    output H7044_SLEN_0,
+    output H7044_SCLK_0,
+    output H7044_SDATA_0,
+
+    // PL_CLK and PL_SYSREF from HMC7044 (differential LVDS, 100 MHz)
+    input  PL_CLK_P_0,
+    input  PL_CLK_N_0,
+    input  PL_SYSREF_P_0,
+    input  PL_SYSREF_N_0,
+
+    // 10MHz external reference clock for HMC7044 (differential)
+    input  mclk_10m_p,
+    input  mclk_10m_n,
+
+    // 10G SFP+ UDP link, matching the reference project.
+    input  sfp_refclkp,
+    input  sfp_refclkn,
+    input  sfp_rxp,
+    input  sfp_rxn,
+    output sfp_txp,
+    output sfp_txn,
+    output SFP_TX_DIS,
+
+`ifndef CUSTOM_XCZU47DR
+    input  adc2_clk_clk_n,
+    input  adc2_clk_clk_p,
+`endif
+    input  dac2_clk_clk_n,
+    input  dac2_clk_clk_p,
+    input  sysref_in_diff_n,
+    input  sysref_in_diff_p,
+`ifndef CUSTOM_XCZU47DR
+    input  adc3_clk_clk_n,
+    input  adc3_clk_clk_p,
+    input  dac3_clk_clk_n,
+    input  dac3_clk_clk_p,
+    input  vin20_v_n,
+    input  vin20_v_p,
+    input  vin22_v_n,
+    input  vin22_v_p,
+    input  vin30_v_n,
+    input  vin30_v_p,
+`endif
+    output vout20_v_n,
+    output vout20_v_p,
+    output vout22_v_n,
+    output vout22_v_p,
+    output vout30_v_n,
+    output vout30_v_p,
+`ifdef CUSTOM_XCZU47DR
+    output vout32_v_n,
+    output vout32_v_p,
+`endif
+
+    input           c0_sys_clk_n,
+    input           c0_sys_clk_p,
+    output          c0_ddr4_act_n,
+    output [16:0]   c0_ddr4_adr,
+    output [1:0]    c0_ddr4_ba,
+    output [0:0]    c0_ddr4_bg,
+    output [0:0]    c0_ddr4_ck_c,
+    output [0:0]    c0_ddr4_ck_t,
+    output [0:0]    c0_ddr4_cke,
+`ifdef CUSTOM_XCZU47DR
+    output [0:0]    c0_ddr4_cs_n,
+    inout  [7:0]    c0_ddr4_dm_n,
+    inout  [63:0]   c0_ddr4_dq,
+    inout  [7:0]    c0_ddr4_dqs_c,
+    inout  [7:0]    c0_ddr4_dqs_t,
+`else
+    output [1:0]    c0_ddr4_cs_n,
+    inout  [3:0]    c0_ddr4_dm_n,
+    inout  [31:0]   c0_ddr4_dq,
+    inout  [3:0]    c0_ddr4_dqs_c,
+    inout  [3:0]    c0_ddr4_dqs_t,
+`endif
+    output [0:0]    c0_ddr4_odt,
+    output          c0_ddr4_reset_n
+);
+
+  // ========== clocks / resets from design_1 ==========
+  wire        pl_clk;
+  wire        pl_aresetn;
+  wire        pl_ps_irq;
+  wire        clk_dac2;
+  wire        dac_axis_clk;
+  wire        clk104_aresetn;
+  wire        ddr4_ui_clk;
+  wire        ddr4_ui_aresetn;
+  wire        artery_clk_mmcm;
+  wire        artery_clk;
+  wire        artery_clk_fb;
+  wire        artery_clk_locked;
+  reg  [2:0]  artery_rst_sync;
+  wire        artery_rst_n;
+  reg  [1:0]  hmc7044_clk_div;
+  wire        hmc7044_clk_25m;
+  wire        hmc7044_set_finish;
+`ifdef CUSTOM_XCZU47DR
+  wire [1:0]  clk104_clk_spi_mux_sel_tri_o;
+`endif
+
+  MMCME4_BASE #(
+    .BANDWIDTH("OPTIMIZED"),
+    .CLKFBOUT_MULT_F(10.000),
+    .CLKFBOUT_PHASE(0.000),
+    .CLKIN1_PERIOD(10.000),
+    .CLKOUT0_DIVIDE_F(5.000),
+    .CLKOUT0_DUTY_CYCLE(0.500),
+    .CLKOUT0_PHASE(0.000),
+    .DIVCLK_DIVIDE(1),
+    .STARTUP_WAIT("FALSE")
+  ) u_artery_clk_mmcm (
+    .CLKIN1(pl_clk),
+    .RST(~pl_aresetn),
+    .CLKFBIN(artery_clk_fb),
+    .CLKFBOUT(artery_clk_fb),
+    .CLKOUT0(artery_clk_mmcm),
+    .LOCKED(artery_clk_locked),
+    .CLKOUT0B(),
+    .CLKOUT1(),
+    .CLKOUT1B(),
+    .CLKOUT2(),
+    .CLKOUT2B(),
+    .CLKOUT3(),
+    .CLKOUT3B(),
+    .CLKOUT4(),
+    .CLKOUT5(),
+    .CLKOUT6(),
+    .PWRDWN(1'b0)
+  );
+
+  BUFG u_artery_clk_bufg (
+    .I(artery_clk_mmcm),
+    .O(artery_clk)
+  );
+
+  always @(posedge artery_clk or negedge artery_clk_locked) begin
+    if (!artery_clk_locked) artery_rst_sync <= 3'b000;
+    else                    artery_rst_sync <= {artery_rst_sync[1:0], 1'b1};
+  end
+
+  assign artery_rst_n = artery_rst_sync[2];
+
+  always @(posedge pl_clk or negedge pl_aresetn) begin
+    if (!pl_aresetn) hmc7044_clk_div <= 2'b00;
+    else             hmc7044_clk_div <= hmc7044_clk_div + 2'b01;
+  end
+
+  assign hmc7044_clk_25m = hmc7044_clk_div[1];
+
+  hmc7044 hmc7044_i (
+      .clk(hmc7044_clk_25m),
+      .rst(pl_aresetn),
+      .H7044_SLEN(H7044_SLEN_0),
+      .H7044_SCLK(H7044_SCLK_0),
+      .H7044_SDATA(H7044_SDATA_0),
+      .SET_FINISH(hmc7044_set_finish)
+  );
+
+  assign RESET_H7044_H_0 = 1'b0;
+  assign H7044_SYNC_0 = hmc7044_set_finish;
+
+  // ========== PS 指令 AXIS（128-bit） ==========
+  wire [127:0] ps_instr_tdata;
+  wire         ps_instr_tvalid;
+  wire         ps_instr_tready;
+  wire [127:0] udp_instr_tdata;
+  wire         udp_instr_tvalid;
+  wire         udp_instr_tready;
+  wire [127:0] instr_tdata;
+  wire         instr_tvalid;
+  wire         instr_tready;
+
+  assign instr_tdata      = udp_instr_tvalid ? udp_instr_tdata : ps_instr_tdata;
+  assign instr_tvalid     = udp_instr_tvalid | ps_instr_tvalid;
+  assign udp_instr_tready = udp_instr_tvalid && instr_tready;
+  assign ps_instr_tready  = !udp_instr_tvalid && instr_tready;
+
+`ifdef CUSTOM_XCZU47DR
+  localparam [63:0] EXT_DDR_ADDR_BASE = 64'h0000_0005_0000_0000;
+`else
+  localparam [63:0] EXT_DDR_ADDR_BASE = 64'd0;
+`endif
+
+  // ========== Reference 10G UDP receiver ==========
+  wire        udp64_rcv_vld_pl;
+  wire [63:0] udp64_rcv_dat_pl;
+  wire        udp64_rcv_vld;
+  wire [63:0] udp64_rcv_dat;
+  wire        udp_rx_cdc_wr_ready;
+  wire        udp64_fifo_af;
+  wire        artery_udp_tx_wr;
+  wire [63:0] artery_udp_tx_data;
+  wire        artery_udp_tx_valid;
+  wire        artery_udp_tx_wr_pl;
+  wire [63:0] artery_udp_tx_data_pl;
+  wire        artery_udp_tx_ready_pl;
+  wire        udp_instr64_tvalid;
+  wire [63:0] udp_instr64_tdata;
+
+  wire [63:0]  M_AXI_WAVE_awaddr;
+  wire [1:0]   M_AXI_WAVE_awburst;
+  wire [3:0]   M_AXI_WAVE_awcache;
+  wire [7:0]   M_AXI_WAVE_awlen;
+  wire [2:0]   M_AXI_WAVE_awprot;
+  wire [0:0]   M_AXI_WAVE_awlock;
+  wire [3:0]   M_AXI_WAVE_awqos;
+  wire         M_AXI_WAVE_awready;
+  wire [2:0]   M_AXI_WAVE_awsize;
+  wire         M_AXI_WAVE_awvalid;
+  wire [255:0] M_AXI_WAVE_wdata;
+  wire         M_AXI_WAVE_wlast;
+  wire         M_AXI_WAVE_wready;
+  wire [31:0]  M_AXI_WAVE_wstrb;
+  wire         M_AXI_WAVE_wvalid;
+  wire         M_AXI_WAVE_bready;
+  wire [1:0]   M_AXI_WAVE_bresp;
+  wire         M_AXI_WAVE_bvalid;
+
+  wire         udp_wave_pkt;
+  wire         udp_instr_word;
+  wire [2:0]   udp_wave_state;
+  wire [31:0]  udp_wave_write_count;
+  wire [31:0]  udp_wave_bresp_count;
+  wire [31:0]  udp_wave_drop_count;
+  wire [15:0]  udp_wave_fifo_count;
+  wire [31:0]  udp_wave_resync_count;
+  wire [1:0]   udp_wave_last_bresp;
+  wire [63:0]  udp_wave_last_addr;
+  wire [127:0] udp_wave_last_wdata;
+  reg  [7:0]  udp_reset_counter = 8'hff;
+  wire        udp_sys_reset;
+  wire        udp_sys_reset_n;
+
+  assign SFP_TX_DIS = 1'b0;
+
+  always @(posedge pl_clk or negedge pl_aresetn) begin
+    if (!pl_aresetn) begin
+      udp_reset_counter <= 8'hff;
+    end else if (udp_reset_counter != 8'h00) begin
+      udp_reset_counter <= udp_reset_counter - 8'd1;
+    end
+  end
+
+  assign udp_sys_reset = (udp_reset_counter != 8'h00);
+  assign udp_sys_reset_n = ~udp_sys_reset;
+
+  udp_10G #(
+      .PAYLOAD_LEN(8)
+  ) udp_10g_i (
+      .gt_rxp_in   (sfp_rxp),
+      .gt_rxn_in   (sfp_rxn),
+      .gt_txp_out  (sfp_txp),
+      .gt_txn_out  (sfp_txn),
+      .gt_refclk_p (sfp_refclkp),
+      .gt_refclk_n (sfp_refclkn),
+      .clk_100Mhz  (pl_clk),
+      .clk         (pl_clk),
+      .rst         (udp_sys_reset),
+      .fifo64_wr   (artery_udp_tx_wr),
+      .fifo64_din  (artery_udp_tx_data),
+      .fifo64_af   (udp64_fifo_af),
+      .rcv_vld     (udp64_rcv_vld_pl),
+      .rcv_dat     (udp64_rcv_dat_pl),
+      .gap_num_vio (24'd0),
+      .loop_en     (1'b0)
+  );
+
+  cfg_cdc_fifo_xpm #(
+    .W(64),
+    .DEPTH(512)
+  ) u_udp_rx_to_ddr_cdc (
+    .wr_clk(pl_clk),
+    .wr_rst_n(udp_sys_reset_n),
+    .wr_data(udp64_rcv_dat_pl),
+    .wr_valid(udp64_rcv_vld_pl),
+    .wr_ready(udp_rx_cdc_wr_ready),
+    .wr_count(),
+    .rd_clk(ddr4_ui_clk),
+    .rd_rst_n(ddr4_ui_aresetn),
+    .rd_data(udp64_rcv_dat),
+    .rd_valid(udp64_rcv_vld),
+    .rd_ready(1'b1)
+  );
+
+  udp_waveform_ddr_writer #(
+      .DDR_ADDR_BASE(EXT_DDR_ADDR_BASE)
+  ) udp_waveform_ddr_writer_i (
+      .clk              (ddr4_ui_clk),
+      .rst_n            (ddr4_ui_aresetn),
+      .udp_tvalid       (udp64_rcv_vld),
+      .udp_tdata        (udp64_rcv_dat),
+      .instr_tvalid     (udp_instr64_tvalid),
+      .instr_tdata      (udp_instr64_tdata),
+      .m_axi_awaddr     (M_AXI_WAVE_awaddr),
+      .m_axi_awburst    (M_AXI_WAVE_awburst),
+      .m_axi_awcache    (M_AXI_WAVE_awcache),
+      .m_axi_awlen      (M_AXI_WAVE_awlen),
+      .m_axi_awprot     (M_AXI_WAVE_awprot),
+      .m_axi_awlock     (M_AXI_WAVE_awlock),
+      .m_axi_awqos      (M_AXI_WAVE_awqos),
+      .m_axi_awready    (M_AXI_WAVE_awready),
+      .m_axi_awsize     (M_AXI_WAVE_awsize),
+      .m_axi_awvalid    (M_AXI_WAVE_awvalid),
+      .m_axi_wdata      (M_AXI_WAVE_wdata),
+      .m_axi_wlast      (M_AXI_WAVE_wlast),
+      .m_axi_wready     (M_AXI_WAVE_wready),
+      .m_axi_wstrb      (M_AXI_WAVE_wstrb),
+      .m_axi_wvalid     (M_AXI_WAVE_wvalid),
+      .m_axi_bready     (M_AXI_WAVE_bready),
+      .m_axi_bresp      (M_AXI_WAVE_bresp),
+      .m_axi_bvalid     (M_AXI_WAVE_bvalid),
+      .dbg_wave_pkt     (udp_wave_pkt),
+      .dbg_instr_word   (udp_instr_word),
+      .dbg_state        (udp_wave_state),
+      .dbg_write_count  (udp_wave_write_count),
+      .dbg_bresp_count  (udp_wave_bresp_count),
+      .dbg_drop_count_o (udp_wave_drop_count),
+      .dbg_fifo_count_o (udp_wave_fifo_count),
+      .dbg_resync_count (udp_wave_resync_count),
+      .dbg_last_bresp   (udp_wave_last_bresp),
+      .dbg_last_addr    (udp_wave_last_addr),
+      .dbg_last_wdata   (udp_wave_last_wdata)
+  );
+
+  udp64_to_axis128_instr udp_instr_adapter_i (
+      .clk           (ddr4_ui_clk),
+      .rst_n         (ddr4_ui_aresetn),
+      .udp_tvalid    (udp_instr64_tvalid),
+      .udp_tdata     (udp_instr64_tdata),
+      .m_axis_tdata  (udp_instr_tdata),
+      .m_axis_tvalid (udp_instr_tvalid),
+      .m_axis_tready (udp_instr_tready)
+  );
+
+  // ========== DataMover ==========
+  wire [103:0] dm_cmd_tdata;
+  wire         dm_cmd_tvalid, dm_cmd_tready;
+  wire [255:0] dm_data_tdata;
+  wire         dm_data_tvalid, dm_data_tready, dm_data_tlast;
+  wire         dm_mm2s_err;
+  wire         dm_mm2s_sts_tvalid, dm_mm2s_sts_tlast;
+  wire [7:0]   dm_mm2s_sts_tdata;
+  wire         dm_mm2s_sts_tkeep;
+  wire [63:0]  M_AXI_DM_araddr;
+
+  // ========== executor -> wave FIFO write side (DDR 域) ==========
+  wire [255:0] ch1_wave_tdata, ch2_wave_tdata, ch3_wave_tdata, ch4_wave_tdata;
+  wire         ch1_wave_tvalid, ch2_wave_tvalid, ch3_wave_tvalid, ch4_wave_tvalid;
+  wire         ch1_wave_tvalid_to_fifo;
+  wire         ch1_wave_tvalid_to_artery_cdc;
+  wire         ch1_wave_tready_internal, ch2_wave_tready_internal, ch3_wave_tready_internal, ch4_wave_tready_internal;
+  wire         ch1_wave_tready_fifo;
+  wire         ch1_wave_tready_artery_cdc;
+  wire         ch2_wave_tready_feedback_cdc;
+  wire         ch3_wave_tready_feedback_cdc;
+  wire [255:0] ch1_artery_tdata_pl;
+  wire         ch1_artery_tvalid_pl;
+  wire         ch1_artery_tready_pl;
+  wire [255:0] ch2_feedback_tdata_pl;
+  wire         ch2_feedback_tvalid_pl;
+  wire         ch2_feedback_tready_pl;
+  wire [255:0] ch3_feedback_tdata_pl;
+  wire         ch3_feedback_tvalid_pl;
+  wire         ch3_feedback_tready_pl;
+  wire [15:0]  ch1_fifo_level_beats;
+  wire [15:0]  ch2_fifo_level_beats;
+  wire [15:0]  ch3_fifo_level_beats;
+  wire [15:0]  ch4_fifo_level_beats;
+
+  // ========== DAC side ready from DAC IP ==========
+  wire         dac_ch1_ready, dac_ch2_ready, dac_ch3_ready, dac_ch4_ready;
+
+  // ========== DataMover AXI MM2S to DDR ==========
+  wire [7:0]   M_AXI_DM_arlen;
+  wire [2:0]   M_AXI_DM_arsize;
+  wire [1:0]   M_AXI_DM_arburst;
+  wire         M_AXI_DM_arready;
+  wire         M_AXI_DM_arvalid;
+  wire [255:0] M_AXI_DM_rdata;
+  wire         M_AXI_DM_rlast;
+  wire         M_AXI_DM_rready;
+  wire [1:0]   M_AXI_DM_rresp;
+  wire         M_AXI_DM_rvalid;
+
+  // ========== GPIO out ==========
+  wire [31:0] gpio_out_reg;
+  wire ps_trigger_raw = gpio_out_reg[0];
+
+  // ========== trigger CDC ==========
+  (* ASYNCHRONOUS_REG="TRUE" *) reg [2:0] trigger_ddr_sync_ff;
+  always @(posedge ddr4_ui_clk or negedge ddr4_ui_aresetn) begin
+    if(!ddr4_ui_aresetn) trigger_ddr_sync_ff <= 3'b000;
+    else                trigger_ddr_sync_ff <= {trigger_ddr_sync_ff[1:0], ps_trigger_raw};
+  end
+  wire ps_trigger_ddr_sync = trigger_ddr_sync_ff[2];
+
+  (* ASYNCHRONOUS_REG="TRUE" *) reg [2:0] trigger_dac_sync_ff;
+  always @(posedge dac_axis_clk or negedge clk104_aresetn) begin
+    if(!clk104_aresetn) trigger_dac_sync_ff <= 3'b000;
+    else                trigger_dac_sync_ff <= {trigger_dac_sync_ff[1:0], ps_trigger_raw};
+  end
+  wire ps_trigger_dac_sync = trigger_dac_sync_ff[2];
+
+`ifndef CUSTOM_XCZU47DR
+  assign trigger_out_sma  = ps_trigger_raw;
+  assign trigger_out_loop = ps_trigger_raw;
+`endif
+
+  // ========== AXI-lite -> AXIS 指令 FIFO 接口（stub/IP替换） ==========
+  // M_AXI_INST signals
+  wire [31:0]  M_AXI_INST_araddr;
+  wire [1:0]   M_AXI_INST_arburst;
+  wire [3:0]   M_AXI_INST_arcache;
+  wire [7:0]   M_AXI_INST_arlen;
+  wire [0:0]   M_AXI_INST_arlock;
+  wire [2:0]   M_AXI_INST_arprot;
+  wire [3:0]   M_AXI_INST_arqos;
+  wire         M_AXI_INST_arready;
+  wire [2:0]   M_AXI_INST_arsize;
+  wire [15:0]  M_AXI_INST_aruser;
+  wire         M_AXI_INST_arvalid;
+
+  wire [31:0]  M_AXI_INST_awaddr;
+  wire [1:0]   M_AXI_INST_awburst;
+  wire [3:0]   M_AXI_INST_awcache;
+  wire [7:0]   M_AXI_INST_awlen;
+  wire [0:0]   M_AXI_INST_awlock;
+  wire [2:0]   M_AXI_INST_awprot;
+  wire [3:0]   M_AXI_INST_awqos;
+  wire         M_AXI_INST_awready;
+  wire [2:0]   M_AXI_INST_awsize;
+  wire [15:0]  M_AXI_INST_awuser;
+  wire         M_AXI_INST_awvalid;
+
+  wire         M_AXI_INST_bready;
+  wire [1:0]   M_AXI_INST_bresp;
+  wire         M_AXI_INST_bvalid;
+
+  wire [31:0]  M_AXI_INST_rdata;
+  wire         M_AXI_INST_rlast;
+  wire         M_AXI_INST_rready;
+  wire [1:0]   M_AXI_INST_rresp;
+  wire         M_AXI_INST_rvalid;
+
+  wire [31:0]  M_AXI_INST_wdata;
+  wire         M_AXI_INST_wlast;
+  wire         M_AXI_INST_wready;
+  wire [3:0]   M_AXI_INST_wstrb;
+  wire         M_AXI_INST_wvalid;
+
+  axi_fifo_interface #(
+      .AXI_DATA_WIDTH(32),
+      .FIFO_DATA_WIDTH(128),
+      .FIFO_DEPTH_LOG2(4)
+  ) axi_fifo_inst (
+      .s_axi_aclk    (pl_clk),
+      .s_axi_aresetn (pl_aresetn),
+
+      .s_axi_awaddr  (M_AXI_INST_awaddr),
+      .s_axi_awlen   (M_AXI_INST_awlen),
+      .s_axi_awvalid (M_AXI_INST_awvalid),
+      .s_axi_awready (M_AXI_INST_awready),
+      .s_axi_wdata   (M_AXI_INST_wdata),
+      .s_axi_wstrb   (M_AXI_INST_wstrb),
+      .s_axi_wvalid  (M_AXI_INST_wvalid),
+      .s_axi_wready  (M_AXI_INST_wready),
+      .s_axi_bvalid  (M_AXI_INST_bvalid),
+      .s_axi_bready  (M_AXI_INST_bready),
+      .s_axi_bresp   (M_AXI_INST_bresp),
+
+      .s_axi_araddr  (M_AXI_INST_araddr),
+      .s_axi_arlen   (M_AXI_INST_arlen),
+      .s_axi_arvalid (M_AXI_INST_arvalid),
+      .s_axi_arready (M_AXI_INST_arready),
+      .s_axi_rdata   (M_AXI_INST_rdata),
+      .s_axi_rlast   (M_AXI_INST_rlast),
+      .s_axi_rvalid  (M_AXI_INST_rvalid),
+      .s_axi_rready  (M_AXI_INST_rready),
+      .s_axi_rresp   (M_AXI_INST_rresp),
+
+      .m_aclk        (ddr4_ui_clk),
+      .m_aresetn     (ddr4_ui_aresetn),
+      .m_axis_tdata  (ps_instr_tdata),
+      .m_axis_tvalid (ps_instr_tvalid),
+      .m_axis_tready (ps_instr_tready)
+  );
+
+  // ========== executor outputs config ==========
+  wire [31:0] ch1_delay_cycles, ch2_delay_cycles, ch3_delay_cycles, ch4_delay_cycles;
+  wire [31:0] ch1_len_beats,   ch2_len_beats,   ch3_len_beats,   ch4_len_beats;
+  wire        ch1_arm,         ch2_arm,         ch3_arm,         ch4_arm;
+  wire        cfg_auto_start;
+  wire        cfg_commit; // 每次 END 提交一帧配置
+
+  wire [2:0]  ex_dbg_st;
+  wire [1:0]  ex_dbg_dm_st;
+  wire        ex_dbg_dm_sel_ch1;
+  wire [31:0] ex_dbg_dm_chunk_beats;
+  wire [31:0] ex_dbg_dm_beats_sent;
+  wire [31:0] ex_dbg_ch1_bytes_left;
+  wire [31:0] ex_dbg_ch2_bytes_left;
+  wire [63:0] ex_dbg_ch1_base_addr;
+  wire [63:0] ex_dbg_ch2_base_addr;
+  wire        ex_dbg_ch1_need_hard, ex_dbg_ch2_need_hard;
+  wire        ex_dbg_ch1_need_soft, ex_dbg_ch2_need_soft;
+  
+  wire [127:0] ex_dbg_instr_in_tdata;
+  wire         ex_dbg_instr_in_tvalid, ex_dbg_instr_in_tready;
+  wire [127:0] ex_dbg_main_tdata;
+  wire         ex_dbg_main_tvalid, ex_dbg_main_tready;
+  wire         ex_dbg_pending_valid, ex_dbg_active_valid;
+  wire [31:0]  ex_dbg_run_delay_cnt;
+
+  // ========== executor ==========
+  Waveform_System_Top #(
+    .DDR_ADDR_BASE(EXT_DDR_ADDR_BASE)
+  ) executor_inst (
+    .aclk(ddr4_ui_clk),
+    .aresetn(ddr4_ui_aresetn),
+    .trigger(ps_trigger_ddr_sync),
+
+    .s_axis_instr_tdata(instr_tdata),
+    .s_axis_instr_tvalid(instr_tvalid),
+    .s_axis_instr_tready(instr_tready),
+
+    .m_axis_dm_cmd_tdata(dm_cmd_tdata),
+    .m_axis_dm_cmd_tvalid(dm_cmd_tvalid),
+    .m_axis_dm_cmd_tready(dm_cmd_tready),
+
+    .s_axis_dm_data_tdata(dm_data_tdata),
+    .s_axis_dm_data_tvalid(dm_data_tvalid),
+    .s_axis_dm_data_tready(dm_data_tready),
+
+    .ch1_fifo_ready(ch1_wave_tready_internal),
+    .ch2_fifo_ready(ch2_wave_tready_internal),
+    .ch3_fifo_ready(ch3_wave_tready_internal),
+    .ch4_fifo_ready(ch4_wave_tready_internal),
+
+    .ch1_fifo_level_beats(ch1_fifo_level_beats),
+    .ch2_fifo_level_beats(ch2_fifo_level_beats),
+    .ch3_fifo_level_beats(ch3_fifo_level_beats),
+    .ch4_fifo_level_beats(ch4_fifo_level_beats),
+
+    .m_axis_ch1_tdata(ch1_wave_tdata),
+    .m_axis_ch1_tvalid(ch1_wave_tvalid),
+    .m_axis_ch2_tdata(ch2_wave_tdata),
+    .m_axis_ch2_tvalid(ch2_wave_tvalid),
+    .m_axis_ch3_tdata(ch3_wave_tdata),
+    .m_axis_ch3_tvalid(ch3_wave_tvalid),
+    .m_axis_ch4_tdata(ch4_wave_tdata),
+    .m_axis_ch4_tvalid(ch4_wave_tvalid),
+
+    .ch1_delay_cycles(ch1_delay_cycles),
+    .ch2_delay_cycles(ch2_delay_cycles),
+    .ch3_delay_cycles(ch3_delay_cycles),
+    .ch4_delay_cycles(ch4_delay_cycles),
+    .ch1_len_beats(ch1_len_beats),
+    .ch2_len_beats(ch2_len_beats),
+    .ch3_len_beats(ch3_len_beats),
+    .ch4_len_beats(ch4_len_beats),
+    .ch1_arm(ch1_arm),
+    .ch2_arm(ch2_arm),
+    .ch3_arm(ch3_arm),
+    .ch4_arm(ch4_arm),
+    .cfg_auto_start(cfg_auto_start),
+    .cfg_commit(cfg_commit),
+
+    .dbg_st            (ex_dbg_st),
+    .dbg_dm_st         (ex_dbg_dm_st),
+    .dbg_dm_sel_ch1    (ex_dbg_dm_sel_ch1),
+    .dbg_dm_chunk_beats(ex_dbg_dm_chunk_beats),
+    .dbg_dm_beats_sent (ex_dbg_dm_beats_sent),
+    .dbg_ch1_bytes_left(ex_dbg_ch1_bytes_left),
+    .dbg_ch2_bytes_left(ex_dbg_ch2_bytes_left),
+    .dbg_ch1_base_addr (ex_dbg_ch1_base_addr),
+    .dbg_ch2_base_addr (ex_dbg_ch2_base_addr),
+    .dbg_ch1_need_hard (ex_dbg_ch1_need_hard),
+    .dbg_ch2_need_hard (ex_dbg_ch2_need_hard),
+    .dbg_ch1_need_soft (ex_dbg_ch1_need_soft),
+    .dbg_ch2_need_soft (ex_dbg_ch2_need_soft),
+    .dbg_instr_in_tdata (ex_dbg_instr_in_tdata),
+    .dbg_instr_in_tvalid(ex_dbg_instr_in_tvalid),
+    .dbg_instr_in_tready(ex_dbg_instr_in_tready),
+    .dbg_main_tdata     (ex_dbg_main_tdata),
+    .dbg_main_tvalid    (ex_dbg_main_tvalid),
+    .dbg_main_tready    (ex_dbg_main_tready),
+    .dbg_pending_valid  (ex_dbg_pending_valid),
+    .dbg_active_valid   (ex_dbg_active_valid),
+    .dbg_run_delay_cnt  (ex_dbg_run_delay_cnt)
+  );
+
+  // ==========================================================
+  // DAC AXIS domain reset: synchronize clk104_aresetn to dac_axis_clk.
+  // ==========================================================
+  reg [2:0] dac_rstff;
+  always @(posedge dac_axis_clk or negedge clk104_aresetn) begin
+    if(!clk104_aresetn) dac_rstff <= 3'b000;
+    else                dac_rstff <= {dac_rstff[1:0], 1'b1};
+  end
+  wire dac_rst_n = dac_rstff[2];
+
+  // ==========================================================
+  // DDR 域：配置帧（160-bit）打包，commit 时写入 cfg FIFO
+  // 关键修复：写入 FIFO 的 seq_id 使用 seq_id_next，避免第一帧=0 导致 DAC gating 卡死
+  // ==========================================================
+  reg [15:0] seq_id;
+  wire [15:0] seq_id_next = seq_id + 16'd1;
+  reg         cfg_wr_pending;
+  reg [287:0] cfg_wr_payload;
+  wire        cfg_wr_ready;
+  wire [287:0] cfg_payload_next = {
+      ch1_delay_cycles,
+      ch2_delay_cycles,
+      ch3_delay_cycles,
+      ch4_delay_cycles,
+      ch1_len_beats,
+      ch2_len_beats,
+      ch3_len_beats,
+      ch4_len_beats,
+      11'd0,
+      cfg_auto_start,
+      ch1_arm,
+      ch2_arm,
+      ch3_arm,
+      ch4_arm,
+      seq_id_next
+  };
+
+  always @(posedge ddr4_ui_clk or negedge ddr4_ui_aresetn) begin
+    if(!ddr4_ui_aresetn) begin
+      seq_id <= 16'd0;
+      cfg_wr_pending <= 1'b0;
+      cfg_wr_payload <= 288'd0;
+    end else begin
+      if(cfg_commit && !cfg_wr_pending) begin
+        cfg_wr_pending <= 1'b1;
+        cfg_wr_payload <= cfg_payload_next;
+      end
+
+      if(cfg_wr_pending && cfg_wr_ready) begin
+        seq_id <= seq_id_next;
+        cfg_wr_pending <= 1'b0;
+      end
+    end
+  end
+
+  wire cfg_wr_valid = cfg_wr_pending;
+
+  // ==========================================================
+  // cfg CDC FIFO (xpm_fifo_async)  DDR->DAC
+  // ==========================================================
+  wire [287:0] cfg_rd_data;
+  wire         cfg_rd_valid;
+  reg          cfg_rd_ready;
+
+  cfg_cdc_fifo_xpm #(
+    .W(288),
+    .DEPTH(16)
+  ) u_cfg_fifo (
+    .wr_clk(ddr4_ui_clk),
+    .wr_rst_n(ddr4_ui_aresetn),
+    .wr_data(cfg_wr_payload),
+    .wr_valid(cfg_wr_valid),
+    .wr_ready(cfg_wr_ready),
+    .wr_count(),
+
+    .rd_clk(dac_axis_clk),
+    .rd_rst_n(dac_rst_n),
+    .rd_data(cfg_rd_data),
+    .rd_valid(cfg_rd_valid),
+    .rd_ready(cfg_rd_ready)
+  );
+
+  // DAC 域：锁存最新一帧配置
+  reg [31:0] ch1_delay_dac, ch2_delay_dac, ch3_delay_dac, ch4_delay_dac;
+  reg [31:0] ch1_len_dac, ch2_len_dac, ch3_len_dac, ch4_len_dac;
+  reg        cfg_auto_start_dac;
+  reg        ch1_arm_dac, ch2_arm_dac, ch3_arm_dac, ch4_arm_dac;
+  reg [15:0] seq_id_dac;
+
+  // The executor counts 128-bit DataMover/FIFO beats. RFDC S_AXIS_20/22 are
+  // 64-bit AXIS ports, so the DAC gate must count twice as many output beats.
+  wire [31:0] ch1_len_dac64 = {ch1_len_dac[30:0], 1'b0};
+  wire [31:0] ch2_len_dac64 = {ch2_len_dac[30:0], 1'b0};
+  wire [31:0] ch3_len_dac64 = {ch3_len_dac[30:0], 1'b0};
+  wire [31:0] ch4_len_dac64 = {ch4_len_dac[30:0], 1'b0};
+
+  always @(posedge dac_axis_clk or negedge dac_rst_n) begin
+    if(!dac_rst_n) begin
+      cfg_rd_ready  <= 1'b0;
+      ch1_delay_dac <= 0; ch2_delay_dac <= 0; ch3_delay_dac <= 0; ch4_delay_dac <= 0;
+      ch1_len_dac   <= 0; ch2_len_dac   <= 0; ch3_len_dac <= 0; ch4_len_dac <= 0;
+      cfg_auto_start_dac <= 0;
+      ch1_arm_dac   <= 0; ch2_arm_dac   <= 0; ch3_arm_dac <= 0; ch4_arm_dac <= 0;
+      seq_id_dac    <= 0;
+    end else begin
+      cfg_rd_ready <= 1'b1; // 简化：一直准备接收
+
+      if(cfg_rd_valid && cfg_rd_ready) begin
+        ch1_delay_dac <= cfg_rd_data[287:256];
+        ch2_delay_dac <= cfg_rd_data[255:224];
+        ch3_delay_dac <= cfg_rd_data[223:192];
+        ch4_delay_dac <= cfg_rd_data[191:160];
+        ch1_len_dac   <= cfg_rd_data[159:128];
+        ch2_len_dac   <= cfg_rd_data[127:96];
+        ch3_len_dac   <= cfg_rd_data[95:64];
+        ch4_len_dac   <= cfg_rd_data[63:32];
+        cfg_auto_start_dac <= cfg_rd_data[20];
+        ch1_arm_dac   <= cfg_rd_data[19];
+        ch2_arm_dac   <= cfg_rd_data[18];
+        ch3_arm_dac   <= cfg_rd_data[17];
+        ch4_arm_dac   <= cfg_rd_data[16];
+        seq_id_dac    <= cfg_rd_data[15:0];
+      end
+    end
+  end
+
+  // ==========================================================
+  // DataMover（stub/IP替换）
+  // ==========================================================
+  axi_datamover_256 datamover_i (
+    .m_axi_mm2s_aclk    (ddr4_ui_clk),
+    .m_axi_mm2s_aresetn (ddr4_ui_aresetn),
+    .mm2s_err           (dm_mm2s_err),
+
+    .m_axis_mm2s_cmdsts_aclk   (ddr4_ui_clk),
+    .m_axis_mm2s_cmdsts_aresetn(ddr4_ui_aresetn),
+
+    .s_axis_mm2s_cmd_tdata (dm_cmd_tdata),
+    .s_axis_mm2s_cmd_tvalid(dm_cmd_tvalid),
+    .s_axis_mm2s_cmd_tready(dm_cmd_tready),
+
+    .m_axis_mm2s_tdata (dm_data_tdata),
+    .m_axis_mm2s_tvalid(dm_data_tvalid),
+    .m_axis_mm2s_tready(dm_data_tready),
+    .m_axis_mm2s_tlast (dm_data_tlast),
+
+    .m_axi_mm2s_araddr (M_AXI_DM_araddr),
+    .m_axi_mm2s_arlen  (M_AXI_DM_arlen),
+    .m_axi_mm2s_arsize (M_AXI_DM_arsize),
+    .m_axi_mm2s_arburst(M_AXI_DM_arburst),
+    .m_axi_mm2s_arvalid(M_AXI_DM_arvalid),
+    .m_axi_mm2s_arready(M_AXI_DM_arready),
+    .m_axi_mm2s_rdata  (M_AXI_DM_rdata),
+    .m_axi_mm2s_rresp  (M_AXI_DM_rresp),
+    .m_axi_mm2s_rlast  (M_AXI_DM_rlast),
+    .m_axi_mm2s_rvalid (M_AXI_DM_rvalid),
+    .m_axi_mm2s_rready (M_AXI_DM_rready),
+
+    .m_axis_mm2s_sts_tvalid(dm_mm2s_sts_tvalid),
+    .m_axis_mm2s_sts_tready(1'b1),
+    .m_axis_mm2s_sts_tdata (dm_mm2s_sts_tdata),
+    .m_axis_mm2s_sts_tkeep (dm_mm2s_sts_tkeep),
+    .m_axis_mm2s_sts_tlast (dm_mm2s_sts_tlast)
+    ,
+
+    .m_axi_s2mm_aclk(ddr4_ui_clk),
+    .m_axi_s2mm_aresetn(ddr4_ui_aresetn),
+    .s2mm_err(),
+    .m_axis_s2mm_cmdsts_awclk(ddr4_ui_clk),
+    .m_axis_s2mm_cmdsts_aresetn(ddr4_ui_aresetn),
+    .s_axis_s2mm_cmd_tvalid(1'b0),
+    .s_axis_s2mm_cmd_tready(),
+    .s_axis_s2mm_cmd_tdata(104'd0),
+    .m_axis_s2mm_sts_tvalid(),
+    .m_axis_s2mm_sts_tready(1'b1),
+    .m_axis_s2mm_sts_tdata(),
+    .m_axis_s2mm_sts_tkeep(),
+    .m_axis_s2mm_sts_tlast(),
+    .m_axi_s2mm_awid(),
+    .m_axi_s2mm_awaddr(),
+    .m_axi_s2mm_awlen(),
+    .m_axi_s2mm_awsize(),
+    .m_axi_s2mm_awburst(),
+    .m_axi_s2mm_awprot(),
+    .m_axi_s2mm_awcache(),
+    .m_axi_s2mm_awuser(),
+    .m_axi_s2mm_awvalid(),
+    .m_axi_s2mm_awready(1'b0),
+    .m_axi_s2mm_wdata(),
+    .m_axi_s2mm_wstrb(),
+    .m_axi_s2mm_wlast(),
+    .m_axi_s2mm_wvalid(),
+    .m_axi_s2mm_wready(1'b0),
+    .m_axi_s2mm_bresp(2'b00),
+    .m_axi_s2mm_bvalid(1'b0),
+    .m_axi_s2mm_bready(),
+    .s_axis_s2mm_tdata(32'd0),
+    .s_axis_s2mm_tkeep(4'h0),
+    .s_axis_s2mm_tlast(1'b0),
+    .s_axis_s2mm_tvalid(1'b0),
+    .s_axis_s2mm_tready()
+  );
+
+  // ==========================================================
+  // Wave async FIFO (DDR 128-bit AXIS -> DAC 64-bit RFDC AXIS)
+  // ==========================================================
+  wire [127:0] dac_fifo_ch1_tdata, dac_fifo_ch2_tdata, dac_fifo_ch3_tdata, dac_fifo_ch4_tdata;
+  wire         dac_fifo_ch1_tvalid, dac_fifo_ch2_tvalid, dac_fifo_ch3_tvalid, dac_fifo_ch4_tvalid;
+  wire         dac_fifo_ch1_tready, dac_fifo_ch2_tready, dac_fifo_ch3_tready, dac_fifo_ch4_tready;
+  wire [63:0]  dac_in_ch1_tdata, dac_in_ch2_tdata, dac_in_ch3_tdata, dac_in_ch4_tdata;
+  wire         dac_in_ch1_tvalid, dac_in_ch2_tvalid, dac_in_ch3_tvalid, dac_in_ch4_tvalid;
+  wire         dac_ch1_ready_gated, dac_ch2_ready_gated, dac_ch3_ready_gated, dac_ch4_ready_gated;
+  wire         dac_ch1_valid_gated, dac_ch2_valid_gated, dac_ch3_valid_gated, dac_ch4_valid_gated;
+
+  wire ch1_allow, ch2_allow, ch3_allow, ch4_allow;
+  wire ch1_prog_empty, ch1_prog_full;
+  wire ch2_prog_empty, ch2_prog_full;
+  wire ch3_prog_empty, ch3_prog_full;
+  wire ch4_prog_empty, ch4_prog_full;
+
+  // ===== NEW: play_ctrl debug wires (接 ILA 用) =====
+  wire        pc_trig_pulse, pc_new_cfg, pc_trig_start, pc_started;
+  wire [15:0] pc_last_seq_id;
+
+  dac_play_ctrl #(
+    .BEAT_BYTES(16)
+  ) u_play_ctrl (
+    .clk(dac_axis_clk),
+    .rst_n(dac_rst_n),
+    .trigger(ps_trigger_dac_sync),
+
+    .cfg_seq_id(seq_id_dac),
+    .auto_start(cfg_auto_start_dac),
+
+    .ch1_delay_cycles(ch1_delay_dac),
+    .ch2_delay_cycles(ch2_delay_dac),
+    .ch3_delay_cycles(ch3_delay_dac),
+    .ch4_delay_cycles(ch4_delay_dac),
+    .ch1_len_beats(ch1_len_dac64),
+    .ch2_len_beats(ch2_len_dac64),
+    .ch3_len_beats(ch3_len_dac64),
+    .ch4_len_beats(ch4_len_dac64),
+    .ch1_arm(ch1_arm_dac),
+    .ch2_arm(ch2_arm_dac),
+    .ch3_arm(ch3_arm_dac),
+    .ch4_arm(ch4_arm_dac),
+
+    .ch1_fifo_tvalid(dac_in_ch1_tvalid),
+    .ch2_fifo_tvalid(dac_in_ch2_tvalid),
+    .ch3_fifo_tvalid(dac_in_ch3_tvalid),
+    .ch4_fifo_tvalid(dac_in_ch4_tvalid),
+    .ch1_fifo_prog_empty(ch1_prog_empty),
+    .ch2_fifo_prog_empty(ch2_prog_empty),
+    .ch3_fifo_prog_empty(ch3_prog_empty),
+    .ch4_fifo_prog_empty(ch4_prog_empty),
+
+    .dac_ch1_ready_in(dac_ch1_ready),
+    .dac_ch2_ready_in(dac_ch2_ready),
+    .dac_ch3_ready_in(dac_ch3_ready),
+    .dac_ch4_ready_in(dac_ch4_ready),
+
+    .ch1_allow(ch1_allow),
+    .ch2_allow(ch2_allow),
+    .ch3_allow(ch3_allow),
+    .ch4_allow(ch4_allow),
+
+    .ch1_active(),
+    .ch2_active(),
+    .ch3_active(),
+    .ch4_active(),
+
+    .dbg_trig_pulse (pc_trig_pulse),
+    .dbg_new_cfg    (pc_new_cfg),
+    .dbg_trig_start (pc_trig_start),
+    .dbg_started    (pc_started),
+    .dbg_last_seq_id(pc_last_seq_id)
+  );
+
+  wire [31:0] ch1_wr_count, ch2_wr_count, ch3_wr_count, ch4_wr_count;
+  wire [15:0] ch1_artery_cdc_wr_count;
+
+  wire [31:0] artery_ddr_latency_cycles;
+  wire        artery_ddr_latency_valid;
+  wire [31:0] artery_ddr_window_count;
+  wire [15:0] artery_ddr_sample_index;
+  wire        artery_ddr_first_fire;
+  wire        artery_ddr_sample_fire;
+  wire        artery_ddr_done;
+  wire        artery_ddr_pred_state;
+  wire        artery_ddr_actual_state;
+  wire        artery_ddr_pred_correct;
+
+  artery_ddr_udp_feedback #(
+	    .WINDOW_START(16'd852),
+	    .WINDOW_LEN(16'd2048),
+	    .STREAM_SAMPLES(16'd4096),
+	    .FEEDBACK_WORDS(16'd4),
+	    .EARLY_LEN(16'd128),
+	    .PREDICT_THRESHOLD_LOW(8'h1A),
+	    .PREDICT_THRESHOLD_HIGH(8'hE6),
+	    .MAX_DECISION_LEN(16'd2048),
+	    .TRAJECTORY_SEG_LEN(16'd16)
+	  ) u_artery_ddr_udp_feedback (
+    .clk(artery_clk),
+    .rst_n(artery_rst_n),
+    .ddr_tdata(ch1_artery_tdata_pl),
+    .ddr_tvalid(ch1_artery_tvalid_pl),
+    .ddr_tready(ch1_artery_tready_pl),
+    .fb0_tdata(ch2_feedback_tdata_pl),
+    .fb0_tvalid(ch2_feedback_tvalid_pl),
+    .fb0_tready(ch2_feedback_tready_pl),
+    .fb1_tdata(ch3_feedback_tdata_pl),
+    .fb1_tvalid(ch3_feedback_tvalid_pl),
+    .fb1_tready(ch3_feedback_tready_pl),
+    .udp_tx_wr(artery_udp_tx_wr_pl),
+    .udp_tx_data(artery_udp_tx_data_pl),
+    .udp_tx_af(~artery_udp_tx_ready_pl),
+    .dbg_latency_cycles(artery_ddr_latency_cycles),
+    .dbg_latency_valid(artery_ddr_latency_valid),
+    .dbg_window_count(artery_ddr_window_count),
+    .dbg_sample_index(artery_ddr_sample_index),
+    .dbg_ddr_first_fire(artery_ddr_first_fire),
+    .dbg_sample_fire(artery_ddr_sample_fire),
+    .dbg_artery_done(artery_ddr_done),
+    .dbg_pred_state(artery_ddr_pred_state),
+    .dbg_actual_state(artery_ddr_actual_state),
+    .dbg_pred_correct(artery_ddr_pred_correct)
+  );
+
+  cfg_cdc_fifo_xpm #(
+    .W(256),
+    .DEPTH(64)
+  ) u_ch1_artery_cdc (
+    .wr_clk(ddr4_ui_clk),
+    .wr_rst_n(ddr4_ui_aresetn),
+    .wr_data(ch1_wave_tdata),
+    .wr_valid(ch1_wave_tvalid_to_artery_cdc),
+    .wr_ready(ch1_wave_tready_artery_cdc),
+    .wr_count(ch1_artery_cdc_wr_count),
+    .rd_clk(artery_clk),
+    .rd_rst_n(artery_rst_n),
+    .rd_data(ch1_artery_tdata_pl),
+    .rd_valid(ch1_artery_tvalid_pl),
+    .rd_ready(ch1_artery_tready_pl)
+  );
+
+  cfg_cdc_fifo_xpm #(
+    .W(256),
+    .DEPTH(16)
+  ) u_ch2_feedback_cdc (
+    .wr_clk(ddr4_ui_clk),
+    .wr_rst_n(ddr4_ui_aresetn),
+    .wr_data(ch2_wave_tdata),
+    .wr_valid(ch2_wave_tvalid),
+    .wr_ready(ch2_wave_tready_feedback_cdc),
+    .wr_count(),
+    .rd_clk(artery_clk),
+    .rd_rst_n(artery_rst_n),
+    .rd_data(ch2_feedback_tdata_pl),
+    .rd_valid(ch2_feedback_tvalid_pl),
+    .rd_ready(ch2_feedback_tready_pl)
+  );
+
+  cfg_cdc_fifo_xpm #(
+    .W(256),
+    .DEPTH(16)
+  ) u_ch3_feedback_cdc (
+    .wr_clk(ddr4_ui_clk),
+    .wr_rst_n(ddr4_ui_aresetn),
+    .wr_data(ch3_wave_tdata),
+    .wr_valid(ch3_wave_tvalid),
+    .wr_ready(ch3_wave_tready_feedback_cdc),
+    .wr_count(),
+    .rd_clk(artery_clk),
+    .rd_rst_n(artery_rst_n),
+    .rd_data(ch3_feedback_tdata_pl),
+    .rd_valid(ch3_feedback_tvalid_pl),
+    .rd_ready(ch3_feedback_tready_pl)
+  );
+
+  cfg_cdc_fifo_xpm #(
+    .W(64),
+    .DEPTH(64)
+  ) u_artery_udp_tx_cdc (
+    .wr_clk(artery_clk),
+    .wr_rst_n(artery_rst_n),
+    .wr_data(artery_udp_tx_data_pl),
+    .wr_valid(artery_udp_tx_wr_pl),
+    .wr_ready(artery_udp_tx_ready_pl),
+    .wr_count(),
+    .rd_clk(pl_clk),
+    .rd_rst_n(udp_sys_reset_n),
+    .rd_data(artery_udp_tx_data),
+    .rd_valid(artery_udp_tx_valid),
+    .rd_ready(~udp64_fifo_af)
+  );
+
+  assign artery_udp_tx_wr = artery_udp_tx_valid && !udp64_fifo_af;
+
+  assign ch1_wave_tready_internal = ch1_wave_tready_artery_cdc;
+  assign ch1_wave_tvalid_to_fifo = 1'b0;
+  assign ch1_wave_tvalid_to_artery_cdc = ch1_wave_tvalid;
+  assign ch2_wave_tready_internal = ch2_wave_tready_feedback_cdc;
+  assign ch3_wave_tready_internal = ch3_wave_tready_feedback_cdc;
+
+  assign ch1_fifo_level_beats = ch1_artery_cdc_wr_count;
+  assign ch2_fifo_level_beats = ch2_wr_count[15:0];
+  assign ch3_fifo_level_beats = ch3_wr_count[15:0];
+  assign ch4_fifo_level_beats = ch4_wr_count[15:0];
+
+  wire ch1_wave_tlast = 1'b0;
+  wire ch2_wave_tlast = 1'b0;
+  wire ch3_wave_tlast = 1'b0;
+  wire ch4_wave_tlast = 1'b0;
+  wire dac_out_ch1_tlast, dac_out_ch2_tlast, dac_out_ch3_tlast, dac_out_ch4_tlast;
+
+  assign dac_ch1_ready_gated = dac_ch1_ready & ch1_allow;
+  assign dac_ch2_ready_gated = dac_ch2_ready & ch2_allow;
+  assign dac_ch3_ready_gated = dac_ch3_ready & ch3_allow;
+  assign dac_ch4_ready_gated = dac_ch4_ready & ch4_allow;
+  assign dac_ch1_valid_gated = dac_in_ch1_tvalid & ch1_allow;
+  assign dac_ch2_valid_gated = dac_in_ch2_tvalid & ch2_allow;
+  assign dac_ch3_valid_gated = dac_in_ch3_tvalid & ch3_allow;
+  assign dac_ch4_valid_gated = dac_in_ch4_tvalid & ch4_allow;
+
+  axis_async_fifo_128 fifo_ch1_inst (
+    .s_axis_aresetn(ddr4_ui_aresetn),
+    .s_axis_aclk   (ddr4_ui_clk),
+    .s_axis_tvalid (ch1_wave_tvalid_to_fifo),
+    .s_axis_tready (ch1_wave_tready_fifo),
+    .s_axis_tdata  (ch1_wave_tdata[127:0]),
+    .s_axis_tlast  (ch1_wave_tlast),
+
+    .m_axis_aclk   (dac_axis_clk),
+    .m_axis_tvalid (dac_fifo_ch1_tvalid),
+    .m_axis_tready (dac_fifo_ch1_tready),
+    .m_axis_tdata  (dac_fifo_ch1_tdata),
+    .m_axis_tlast  (dac_out_ch1_tlast),
+
+    .axis_wr_data_count(ch1_wr_count),
+    .prog_empty        (ch1_prog_empty),
+    .prog_full         (ch1_prog_full)
+  );
+
+  axis_async_fifo_128 fifo_ch2_inst (
+    .s_axis_aresetn(ddr4_ui_aresetn),
+    .s_axis_aclk   (ddr4_ui_clk),
+    .s_axis_tvalid (1'b0),
+    .s_axis_tready (),
+    .s_axis_tdata  (128'd0),
+    .s_axis_tlast  (ch2_wave_tlast),
+
+    .m_axis_aclk   (dac_axis_clk),
+    .m_axis_tvalid (dac_fifo_ch2_tvalid),
+    .m_axis_tready (dac_fifo_ch2_tready),
+    .m_axis_tdata  (dac_fifo_ch2_tdata),
+    .m_axis_tlast  (dac_out_ch2_tlast),
+
+    .axis_wr_data_count(ch2_wr_count),
+    .prog_empty        (ch2_prog_empty),
+    .prog_full         (ch2_prog_full)
+  );
+
+
+  axis_async_fifo_128 fifo_ch3_inst (
+    .s_axis_aresetn(ddr4_ui_aresetn),
+    .s_axis_aclk   (ddr4_ui_clk),
+    .s_axis_tvalid (1'b0),
+    .s_axis_tready (),
+    .s_axis_tdata  (128'd0),
+    .s_axis_tlast  (ch3_wave_tlast),
+
+    .m_axis_aclk   (dac_axis_clk),
+    .m_axis_tvalid (dac_fifo_ch3_tvalid),
+    .m_axis_tready (dac_fifo_ch3_tready),
+    .m_axis_tdata  (dac_fifo_ch3_tdata),
+    .m_axis_tlast  (dac_out_ch3_tlast),
+
+    .axis_wr_data_count(ch3_wr_count),
+    .prog_empty        (ch3_prog_empty),
+    .prog_full         (ch3_prog_full)
+  );
+
+  axis_async_fifo_128 fifo_ch4_inst (
+    .s_axis_aresetn(ddr4_ui_aresetn),
+    .s_axis_aclk   (ddr4_ui_clk),
+    .s_axis_tvalid (ch4_wave_tvalid),
+    .s_axis_tready (ch4_wave_tready_internal),
+    .s_axis_tdata  (ch4_wave_tdata[127:0]),
+    .s_axis_tlast  (ch4_wave_tlast),
+
+    .m_axis_aclk   (dac_axis_clk),
+    .m_axis_tvalid (dac_fifo_ch4_tvalid),
+    .m_axis_tready (dac_fifo_ch4_tready),
+    .m_axis_tdata  (dac_fifo_ch4_tdata),
+    .m_axis_tlast  (dac_out_ch4_tlast),
+
+    .axis_wr_data_count(ch4_wr_count),
+    .prog_empty        (ch4_prog_empty),
+    .prog_full         (ch4_prog_full)
+  );
+
+  axis_128_to_64 dac_ch1_width_i (
+    .clk      (dac_axis_clk),
+    .rst_n    (dac_rst_n),
+    .s_tdata  (dac_fifo_ch1_tdata),
+    .s_tvalid (dac_fifo_ch1_tvalid),
+    .s_tready (dac_fifo_ch1_tready),
+    .m_tdata  (dac_in_ch1_tdata),
+    .m_tvalid (dac_in_ch1_tvalid),
+    .m_tready (dac_ch1_ready_gated)
+  );
+
+  axis_128_to_64 dac_ch2_width_i (
+    .clk      (dac_axis_clk),
+    .rst_n    (dac_rst_n),
+    .s_tdata  (dac_fifo_ch2_tdata),
+    .s_tvalid (dac_fifo_ch2_tvalid),
+    .s_tready (dac_fifo_ch2_tready),
+    .m_tdata  (dac_in_ch2_tdata),
+    .m_tvalid (dac_in_ch2_tvalid),
+    .m_tready (dac_ch2_ready_gated)
+  );
+
+
+  axis_128_to_64 dac_ch3_width_i (
+    .clk      (dac_axis_clk),
+    .rst_n    (dac_rst_n),
+    .s_tdata  (dac_fifo_ch3_tdata),
+    .s_tvalid (dac_fifo_ch3_tvalid),
+    .s_tready (dac_fifo_ch3_tready),
+    .m_tdata  (dac_in_ch3_tdata),
+    .m_tvalid (dac_in_ch3_tvalid),
+    .m_tready (dac_ch3_ready_gated)
+  );
+
+  axis_128_to_64 dac_ch4_width_i (
+    .clk      (dac_axis_clk),
+    .rst_n    (dac_rst_n),
+    .s_tdata  (dac_fifo_ch4_tdata),
+    .s_tvalid (dac_fifo_ch4_tvalid),
+    .s_tready (dac_fifo_ch4_tready),
+    .m_tdata  (dac_in_ch4_tdata),
+    .m_tvalid (dac_in_ch4_tvalid),
+    .m_tready (dac_ch4_ready_gated)
+  );
+
+  // ==========================================================
+  // design_1（Block Design stub/IP替换）
+  // 注意：送入 DAC 的 tvalid 必须用 gated valid！
+  // ==========================================================
+  // M_AXI_GPIO (stub)
+  wire [31:0] M_AXI_GPIO_araddr;
+  wire [1:0]  M_AXI_GPIO_arburst;
+  wire [3:0]  M_AXI_GPIO_arcache;
+  wire [7:0]  M_AXI_GPIO_arlen;
+  wire [0:0]  M_AXI_GPIO_arlock;
+  wire [2:0]  M_AXI_GPIO_arprot;
+  wire [3:0]  M_AXI_GPIO_arqos;
+  wire        M_AXI_GPIO_arready;
+  wire [2:0]  M_AXI_GPIO_arsize;
+  wire [15:0] M_AXI_GPIO_aruser;
+  wire        M_AXI_GPIO_arvalid;
+
+  wire [31:0] M_AXI_GPIO_awaddr;
+  wire [1:0]  M_AXI_GPIO_awburst;
+  wire [3:0]  M_AXI_GPIO_awcache;
+  wire [7:0]  M_AXI_GPIO_awlen;
+  wire [0:0]  M_AXI_GPIO_awlock;
+  wire [2:0]  M_AXI_GPIO_awprot;
+  wire [3:0]  M_AXI_GPIO_awqos;
+  wire        M_AXI_GPIO_awready;
+  wire [2:0]  M_AXI_GPIO_awsize;
+  wire [15:0] M_AXI_GPIO_awuser;
+  wire        M_AXI_GPIO_awvalid;
+
+  wire        M_AXI_GPIO_bready;
+  wire [1:0]  M_AXI_GPIO_bresp;
+  wire        M_AXI_GPIO_bvalid;
+
+  wire [31:0] M_AXI_GPIO_rdata;
+  wire [31:0] axigpio_rdata;
+  wire        M_AXI_GPIO_rlast;
+  wire        M_AXI_GPIO_rready;
+  wire [1:0]  M_AXI_GPIO_rresp;
+  wire        M_AXI_GPIO_rvalid;
+
+  wire [31:0] M_AXI_GPIO_wdata;
+  wire        M_AXI_GPIO_wlast;
+  wire        M_AXI_GPIO_wready;
+  wire [3:0]  M_AXI_GPIO_wstrb;
+  wire        M_AXI_GPIO_wvalid;
+
+  design_1 design_1_i (
+      .pl_clk(pl_clk),
+      .pl_aresetn(pl_aresetn),
+      .pl_ps_irq(pl_ps_irq),
+      .clk_dac2(clk_dac2),
+      .dac_axis_clk(dac_axis_clk),
+      .clk104_aresetn(clk104_aresetn),
+      .ddr4_ui_clk(ddr4_ui_clk),
+      .ddr4_ui_aresetn(ddr4_ui_aresetn),
+
+`ifndef CUSTOM_XCZU47DR
+      .adc2_clk_clk_n(adc2_clk_clk_n),
+      .adc2_clk_clk_p(adc2_clk_clk_p),
+`endif
+      .dac2_clk_clk_n(dac2_clk_clk_n),
+      .dac2_clk_clk_p(dac2_clk_clk_p),
+      .sysref_in_diff_n(sysref_in_diff_n),
+      .sysref_in_diff_p(sysref_in_diff_p),
+`ifndef CUSTOM_XCZU47DR
+       .adc3_clk_clk_n(adc3_clk_clk_n),
+      .adc3_clk_clk_p(adc3_clk_clk_p),
+      .dac3_clk_clk_n(dac3_clk_clk_n),
+      .dac3_clk_clk_p(dac3_clk_clk_p),
+
+      .vin20_v_n(vin20_v_n),
+      .vin20_v_p(vin20_v_p),
+      .vin22_v_n(vin22_v_n),
+      .vin22_v_p(vin22_v_p),
+      .vin30_v_n(vin30_v_n),
+      .vin30_v_p(vin30_v_p),
+`endif
+      .vout20_v_n(vout20_v_n),
+      .vout20_v_p(vout20_v_p),
+      .vout22_v_n(vout22_v_n),
+      .vout22_v_p(vout22_v_p),
+      .vout30_v_n(vout30_v_n),
+      .vout30_v_p(vout30_v_p),
+`ifdef CUSTOM_XCZU47DR
+      .vout32_v_n(vout32_v_n),
+      .vout32_v_p(vout32_v_p),
+`endif
+
+      .c0_sys_clk_n(c0_sys_clk_n),
+      .c0_sys_clk_p(c0_sys_clk_p),
+      .c0_ddr4_act_n(c0_ddr4_act_n),
+      .c0_ddr4_adr(c0_ddr4_adr),
+      .c0_ddr4_ba(c0_ddr4_ba),
+      .c0_ddr4_bg(c0_ddr4_bg),
+      .c0_ddr4_ck_c(c0_ddr4_ck_c),
+      .c0_ddr4_ck_t(c0_ddr4_ck_t),
+      .c0_ddr4_cke(c0_ddr4_cke),
+      .c0_ddr4_cs_n(c0_ddr4_cs_n),
+      .c0_ddr4_dm_n(c0_ddr4_dm_n),
+      .c0_ddr4_dq(c0_ddr4_dq),
+      .c0_ddr4_dqs_c(c0_ddr4_dqs_c),
+      .c0_ddr4_dqs_t(c0_ddr4_dqs_t),
+      .c0_ddr4_odt(c0_ddr4_odt),
+      .c0_ddr4_reset_n(c0_ddr4_reset_n),
+
+      // DDR AXI slave for DataMover read (S_AXI_01)
+      .S_AXI_01_araddr(M_AXI_DM_araddr),
+      .S_AXI_01_arburst(M_AXI_DM_arburst),
+      .S_AXI_01_arcache(4'b0011),
+      .S_AXI_01_arlen(M_AXI_DM_arlen),
+      .S_AXI_01_arlock(1'b0),
+      .S_AXI_01_arprot(3'b000),
+      .S_AXI_01_arqos(4'b0000),
+      .S_AXI_01_arready(M_AXI_DM_arready),
+      .S_AXI_01_arsize(M_AXI_DM_arsize),
+      .S_AXI_01_arvalid(M_AXI_DM_arvalid),
+      .S_AXI_01_rdata(M_AXI_DM_rdata),
+      .S_AXI_01_rlast(M_AXI_DM_rlast),
+      .S_AXI_01_rready(M_AXI_DM_rready),
+      .S_AXI_01_rresp(M_AXI_DM_rresp),
+      .S_AXI_01_rvalid(M_AXI_DM_rvalid),
+
+      .S_AXI_01_awaddr(M_AXI_WAVE_awaddr),
+      .S_AXI_01_awburst(M_AXI_WAVE_awburst),
+      .S_AXI_01_awcache(M_AXI_WAVE_awcache),
+      .S_AXI_01_awlen(M_AXI_WAVE_awlen),
+      .S_AXI_01_awlock(M_AXI_WAVE_awlock),
+      .S_AXI_01_awprot(M_AXI_WAVE_awprot),
+      .S_AXI_01_awqos(M_AXI_WAVE_awqos),
+      .S_AXI_01_awready(M_AXI_WAVE_awready),
+      .S_AXI_01_awsize(M_AXI_WAVE_awsize),
+      .S_AXI_01_awvalid(M_AXI_WAVE_awvalid),
+      .S_AXI_01_wdata(M_AXI_WAVE_wdata),
+      .S_AXI_01_wlast(M_AXI_WAVE_wlast),
+      .S_AXI_01_wready(M_AXI_WAVE_wready),
+      .S_AXI_01_wstrb(M_AXI_WAVE_wstrb),
+      .S_AXI_01_wvalid(M_AXI_WAVE_wvalid),
+      .S_AXI_01_bready(M_AXI_WAVE_bready),
+      .S_AXI_01_bresp(M_AXI_WAVE_bresp),
+      .S_AXI_01_bvalid(M_AXI_WAVE_bvalid),
+
+      // PS AXI master for instruction fifo (M_AXI_INST)
+      .M_AXI_INST_araddr(M_AXI_INST_araddr),
+      .M_AXI_INST_arburst(M_AXI_INST_arburst),
+      .M_AXI_INST_arcache(M_AXI_INST_arcache),
+      .M_AXI_INST_arlen(M_AXI_INST_arlen),
+      .M_AXI_INST_arlock(M_AXI_INST_arlock),
+      .M_AXI_INST_arprot(M_AXI_INST_arprot),
+      .M_AXI_INST_arqos(M_AXI_INST_arqos),
+      .M_AXI_INST_arready(M_AXI_INST_arready),
+      .M_AXI_INST_arsize(M_AXI_INST_arsize),
+      .M_AXI_INST_aruser(M_AXI_INST_aruser),
+      .M_AXI_INST_arvalid(M_AXI_INST_arvalid),
+
+      .M_AXI_INST_awaddr(M_AXI_INST_awaddr),
+      .M_AXI_INST_awburst(M_AXI_INST_awburst),
+      .M_AXI_INST_awcache(M_AXI_INST_awcache),
+      .M_AXI_INST_awlen(M_AXI_INST_awlen),
+      .M_AXI_INST_awlock(M_AXI_INST_awlock),
+      .M_AXI_INST_awprot(M_AXI_INST_awprot),
+      .M_AXI_INST_awqos(M_AXI_INST_awqos),
+      .M_AXI_INST_awready(M_AXI_INST_awready),
+      .M_AXI_INST_awsize(M_AXI_INST_awsize),
+      .M_AXI_INST_awuser(M_AXI_INST_awuser),
+      .M_AXI_INST_awvalid(M_AXI_INST_awvalid),
+
+      .M_AXI_INST_bready(M_AXI_INST_bready),
+      .M_AXI_INST_bresp(M_AXI_INST_bresp),
+      .M_AXI_INST_bvalid(M_AXI_INST_bvalid),
+
+      .M_AXI_INST_rdata(M_AXI_INST_rdata),
+      .M_AXI_INST_rlast(M_AXI_INST_rlast),
+      .M_AXI_INST_rready(M_AXI_INST_rready),
+      .M_AXI_INST_rresp(M_AXI_INST_rresp),
+      .M_AXI_INST_rvalid(M_AXI_INST_rvalid),
+
+      .M_AXI_INST_wdata(M_AXI_INST_wdata),
+      .M_AXI_INST_wlast(M_AXI_INST_wlast),
+      .M_AXI_INST_wready(M_AXI_INST_wready),
+      .M_AXI_INST_wstrb(M_AXI_INST_wstrb),
+      .M_AXI_INST_wvalid(M_AXI_INST_wvalid),
+
+      .S_AXIS_20_tdata(dac_in_ch1_tdata),
+      .S_AXIS_20_tvalid(dac_ch1_valid_gated),
+      .S_AXIS_20_tready(dac_ch1_ready),
+
+      .S_AXIS_22_tdata(dac_in_ch2_tdata),
+      .S_AXIS_22_tvalid(dac_ch2_valid_gated),
+      .S_AXIS_22_tready(dac_ch2_ready),
+
+      .S_AXIS_30_tdata(dac_in_ch3_tdata),
+      .S_AXIS_30_tvalid(dac_ch3_valid_gated),
+      .S_AXIS_30_tready(dac_ch3_ready),
+`ifdef CUSTOM_XCZU47DR
+      .S_AXIS_32_tdata(dac_in_ch4_tdata),
+      .S_AXIS_32_tvalid(dac_ch4_valid_gated),
+      .S_AXIS_32_tready(dac_ch4_ready),
+`endif
+
+      // GPIO AXI master (M_AXI_GPIO) - stub pass-through in this file
+      .M_AXI_GPIO_araddr (M_AXI_GPIO_araddr),
+      .M_AXI_GPIO_arburst(M_AXI_GPIO_arburst),
+      .M_AXI_GPIO_arcache(M_AXI_GPIO_arcache),
+      .M_AXI_GPIO_arlen  (M_AXI_GPIO_arlen),
+      .M_AXI_GPIO_arlock (M_AXI_GPIO_arlock),
+      .M_AXI_GPIO_arprot (M_AXI_GPIO_arprot),
+      .M_AXI_GPIO_arqos  (M_AXI_GPIO_arqos),
+      .M_AXI_GPIO_arready(M_AXI_GPIO_arready),
+      .M_AXI_GPIO_arsize (M_AXI_GPIO_arsize),
+      .M_AXI_GPIO_aruser (M_AXI_GPIO_aruser),
+      .M_AXI_GPIO_arvalid(M_AXI_GPIO_arvalid),
+
+      .M_AXI_GPIO_awaddr (M_AXI_GPIO_awaddr),
+      .M_AXI_GPIO_awburst(M_AXI_GPIO_awburst),
+      .M_AXI_GPIO_awcache(M_AXI_GPIO_awcache),
+      .M_AXI_GPIO_awlen  (M_AXI_GPIO_awlen),
+      .M_AXI_GPIO_awlock (M_AXI_GPIO_awlock),
+      .M_AXI_GPIO_awprot (M_AXI_GPIO_awprot),
+      .M_AXI_GPIO_awqos  (M_AXI_GPIO_awqos),
+      .M_AXI_GPIO_awready(M_AXI_GPIO_awready),
+      .M_AXI_GPIO_awsize (M_AXI_GPIO_awsize),
+      .M_AXI_GPIO_awuser (M_AXI_GPIO_awuser),
+      .M_AXI_GPIO_awvalid(M_AXI_GPIO_awvalid),
+
+      .M_AXI_GPIO_bready (M_AXI_GPIO_bready),
+      .M_AXI_GPIO_bresp  (M_AXI_GPIO_bresp),
+      .M_AXI_GPIO_bvalid (M_AXI_GPIO_bvalid),
+
+      .M_AXI_GPIO_rdata  (M_AXI_GPIO_rdata),
+      .M_AXI_GPIO_rlast  (M_AXI_GPIO_rlast),
+      .M_AXI_GPIO_rready (M_AXI_GPIO_rready),
+      .M_AXI_GPIO_rresp  (M_AXI_GPIO_rresp),
+      .M_AXI_GPIO_rvalid (M_AXI_GPIO_rvalid),
+
+      .M_AXI_GPIO_wdata  (M_AXI_GPIO_wdata),
+      .M_AXI_GPIO_wlast  (M_AXI_GPIO_wlast),
+      .M_AXI_GPIO_wready (M_AXI_GPIO_wready),
+      .M_AXI_GPIO_wstrb  (M_AXI_GPIO_wstrb),
+      .M_AXI_GPIO_wvalid (M_AXI_GPIO_wvalid)
+  );
+
+  // ==========================================================
+  // GPIO IP（stub）—— 输出 gpio_out_reg
+  // ==========================================================
+  AXIGPIO axigpio_i (
+      .clock(pl_clk),
+      .reset(~pl_aresetn),
+      .io_axi_aw_ready(M_AXI_GPIO_awready),
+      .io_axi_aw_valid(M_AXI_GPIO_awvalid),
+      .io_axi_aw_bits_addr(M_AXI_GPIO_awaddr[8:0]),
+      .io_axi_aw_bits_burst(M_AXI_GPIO_awburst),
+      .io_axi_aw_bits_cache(M_AXI_GPIO_awcache),
+      .io_axi_aw_bits_lock(M_AXI_GPIO_awlock),
+      .io_axi_aw_bits_prot(M_AXI_GPIO_awprot),
+      .io_axi_aw_bits_qos(M_AXI_GPIO_awqos),
+      .io_axi_aw_bits_region(4'b0000),
+      .io_axi_aw_bits_size(M_AXI_GPIO_awsize),
+
+      .io_axi_ar_ready(M_AXI_GPIO_arready),
+      .io_axi_ar_valid(M_AXI_GPIO_arvalid),
+      .io_axi_ar_bits_addr(M_AXI_GPIO_araddr[8:0]),
+      .io_axi_ar_bits_burst(M_AXI_GPIO_arburst),
+      .io_axi_ar_bits_cache(M_AXI_GPIO_arcache),
+      .io_axi_ar_bits_lock(M_AXI_GPIO_arlock),
+      .io_axi_ar_bits_prot(M_AXI_GPIO_arprot),
+      .io_axi_ar_bits_qos(M_AXI_GPIO_arqos),
+      .io_axi_ar_bits_region(4'b0000),
+      .io_axi_ar_bits_size(M_AXI_GPIO_arsize),
+
+      .io_axi_w_ready(M_AXI_GPIO_wready),
+      .io_axi_w_valid(M_AXI_GPIO_wvalid),
+      .io_axi_w_bits_data(M_AXI_GPIO_wdata),
+      .io_axi_w_bits_last(M_AXI_GPIO_wlast),
+      .io_axi_w_bits_strb(M_AXI_GPIO_wstrb),
+
+      .io_axi_r_ready(M_AXI_GPIO_rready),
+      .io_axi_r_valid(M_AXI_GPIO_rvalid),
+      .io_axi_r_bits_data(axigpio_rdata),
+      .io_axi_r_bits_last(M_AXI_GPIO_rlast),
+      .io_axi_r_bits_resp(M_AXI_GPIO_rresp),
+
+      .io_axi_b_ready(M_AXI_GPIO_bready),
+      .io_axi_b_valid(M_AXI_GPIO_bvalid),
+      .io_axi_b_bits_resp(M_AXI_GPIO_bresp),
+
+      .io_gpio(clk104_clk_spi_mux_sel_tri_o),
+      .io_gpio2(gpio_out_reg)
+  );
+
+  assign M_AXI_GPIO_rdata = axigpio_rdata | {hmc7044_set_finish, 31'b0};
+
+  ila_udp_ddr u_ila_udp_ddr (
+    .clk(ddr4_ui_clk),
+    .probe0({
+      ddr4_ui_aresetn,                 // 127
+      ps_trigger_ddr_sync,             // 126
+      udp64_rcv_vld,                   // 125
+      udp_wave_pkt,                    // 124
+      udp_instr_word,                  // 123
+      udp_instr_tvalid,                // 122
+      udp_instr_tready,                // 121
+      instr_tvalid,                    // 120
+      instr_tready,                    // 119
+      cfg_commit,                      // 118
+      dm_cmd_tvalid,                   // 117
+      dm_cmd_tready,                   // 116
+      dm_data_tvalid,                  // 115
+      dm_data_tready,                  // 114
+      dm_data_tlast,                   // 113
+      ch1_wave_tvalid,                 // 112
+      ch1_wave_tready_internal,        // 111
+      ch2_wave_tvalid,                 // 110
+      ch2_wave_tready_internal,        // 109
+      M_AXI_DM_arvalid,                // 108
+      M_AXI_DM_arready,                // 107
+      M_AXI_DM_rvalid,                 // 106
+      M_AXI_DM_rready,                 // 105
+      M_AXI_DM_rlast,                  // 104
+      dm_mm2s_err,                     // 103
+      dm_mm2s_sts_tvalid,              // 102
+      M_AXI_WAVE_awvalid,              // 101
+      M_AXI_WAVE_awready,              // 100
+      M_AXI_WAVE_wvalid,               // 99
+      M_AXI_WAVE_wready,               // 98
+      M_AXI_WAVE_bvalid,               // 97
+      M_AXI_WAVE_bready,               // 96
+      ex_dbg_active_valid,             // 95
+      ex_dbg_pending_valid,            // 94
+      ex_dbg_ch1_need_hard,            // 93
+      ex_dbg_ch2_need_hard,            // 92
+      ex_dbg_ch1_need_soft,            // 91
+      ex_dbg_ch2_need_soft,            // 90
+      ex_dbg_dm_sel_ch1,               // 89
+      ex_dbg_dm_st,                    // 88:87
+      ex_dbg_st,                       // 86:84
+      udp_wave_state,                  // 83:81
+      M_AXI_DM_rresp,                  // 80:79
+      M_AXI_WAVE_bresp,                // 78:77
+      udp_wave_last_bresp,             // 76:75
+      dm_mm2s_sts_tdata,               // 74:67
+      udp_wave_fifo_count,             // 66:51
+      ch1_fifo_level_beats,            // 50:35
+      ch2_fifo_level_beats,            // 34:19
+      udp_wave_write_count[9:0],       // 18:9
+      udp_wave_drop_count[8:0]         // 8:0
+    }),
+    .probe1(udp64_rcv_dat),
+    .probe2(M_AXI_WAVE_wdata[127:0]),
+    .probe3({24'd0, dm_cmd_tdata}),
+    .probe4(instr_tdata),
+    .probe5(dm_cmd_tdata),
+    .probe6(dm_data_tdata[127:0]),
+    .probe7({ex_dbg_ch1_base_addr, ex_dbg_ch2_base_addr}),
+    .probe8({ex_dbg_ch1_bytes_left, ex_dbg_ch2_bytes_left, ex_dbg_dm_chunk_beats, ex_dbg_dm_beats_sent}),
+    .probe9(ch1_wave_tdata[127:0]),
+    .probe10(ch2_wave_tdata),
+    .probe11(udp_wave_last_wdata)
+  );
+
+  ila_dac_axis u_ila_dac_axis (
+    .clk(dac_axis_clk),
+    .probe0({
+      57'd0,
+      ch4_prog_full,
+      ch3_prog_full,
+      ch2_prog_full,
+      ch1_prog_full,
+      ch4_prog_empty,
+      ch3_prog_empty,
+      ch2_prog_empty,
+      ch1_prog_empty,
+      cfg_rd_ready,
+      cfg_rd_valid,
+      pc_new_cfg,
+      ch4_allow,
+      ch3_allow,
+      ch2_len_dac64[13:0],
+      ch1_len_dac64[13:0],
+      pc_last_seq_id,
+      seq_id_dac,
+      ch4_arm_dac,
+      ch3_arm_dac,
+      ch2_arm_dac,
+      ch1_arm_dac,
+      pc_started,
+      pc_trig_start,
+      cfg_auto_start_dac,
+      pc_trig_pulse,
+      ch2_allow,
+      ch1_allow,
+      dac_ch4_ready_gated,
+      dac_ch3_ready_gated,
+      dac_ch2_ready_gated,
+      dac_ch1_ready_gated,
+      dac_ch4_ready,
+      dac_ch3_ready,
+      dac_ch2_ready,
+      dac_ch1_ready,
+      dac_ch4_valid_gated,
+      dac_ch3_valid_gated,
+      dac_ch2_valid_gated,
+      dac_ch1_valid_gated,
+      dac_in_ch4_tvalid,
+      dac_in_ch3_tvalid,
+      dac_in_ch2_tvalid,
+      dac_in_ch1_tvalid,
+      ps_trigger_dac_sync,
+      dac_rst_n
+    }),
+    .probe1({dac_in_ch2_tdata, dac_in_ch1_tdata}),
+    .probe2({dac_in_ch4_tdata, dac_in_ch3_tdata}),
+    .probe3(cfg_rd_data[127:0]),
+    .probe4({ch1_wr_count, ch2_wr_count, ch3_wr_count, ch4_wr_count}),
+    .probe5({ch1_delay_dac, ch2_delay_dac, ch3_delay_dac, ch4_delay_dac})
+  );
+endmodule

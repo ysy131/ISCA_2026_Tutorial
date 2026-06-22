@@ -1,0 +1,42 @@
+# Vivado generated files
+.Xil/
+*.jou
+*.log
+*.str
+*.wdb
+*.wcfg
+*.pb
+*.rpt
+*.rpx
+*.bit
+*.bin
+*.ltx
+*.dcp
+*.mmi
+
+# Vivado generated directories
+hardware/custom_xczu47dr_rfdc.cache/
+hardware/custom_xczu47dr_rfdc.gen/
+hardware/custom_xczu47dr_rfdc.hw/
+hardware/custom_xczu47dr_rfdc.ip_user_files/
+hardware/custom_xczu47dr_rfdc.runs/
+hardware/custom_xczu47dr_rfdc.sim/
+
+# Python cache and environments
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Large local data
+*.mat
+*.h5
+*.hdf5
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
